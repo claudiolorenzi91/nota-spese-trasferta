@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="it" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nota Spese & Scontrini Aziendali</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF Library for standalone receipt & report PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- jsPDF AutoTable plugin for clean tabular reports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-full flex flex-col font-sans antialiased">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-5xl mx-auto px-4 py-4 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 text-white p-2.5 rounded-xl shadow-sm flex items-center justify-center">
+                    <i class="fa-solid fa-receipt text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900">Nota Spese Trasferta</h1>
+                    <p class="text-xs text-slate-500">Gestione scontrini e generazione PDF individuali o cumulativi</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end">
+                <span id="totalBadge" class="bg-brand-50 text-brand-700 font-medium px-3.5 py-1.5 rounded-full text-sm border border-brand-100">
+                    Totale: € 0.00
+                </span>
+                <button onclick="openTripSettingsModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-user-gear"></i>
+                    <span id="headerTripSummaryBtn">Dettagli Trasferta</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-5xl w-full mx-auto px-4 py-6 sm:px-6 space-y-6">
+        
+        <section class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5 relative overflow-hidden">
+            <div class="absolute top-0 right-0 bg-brand-50 text-brand-700 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider border-l border-b border-brand-100">
+                Informazioni Trasferta
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-center">
+                <div>
+                    <span class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Nome</span>
+                    <span id="displayFirstName" class="text-sm font-bold text-slate-800">Mario</span>
+                </div>
+                <div>
+                    <span class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Cognome</span>
+                    <span id="displayLastName" class="text-sm font-bold text-slate-800">Rossi</span>
+                </div>
+                <div>
+                    <span class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Azienda / Centro di Costo</span>
+                    <span id="displayCompanyName" class="text-sm font-bold text-slate-800">Azienda S.p.A.</span>
+                </div>
+                <div>
+                    <span class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Nazione / Città</span>
+                    <span id="displayLocation" class="text-sm font-bold text-slate-800">Italia, Milano</span>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+                <button onclick="openTripSettingsModal()" class="bg-slate-100 hover:bg-brand-50 hover:text-brand-600 text-slate-600 text-xs font-semibold px-3.5 py-2 rounded-xl transition inline-flex items-center space-x-1.5 border border-slate-200">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>Modifica Dati Trasferta</span>
+                </button>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section class="lg:col-span-1">
+                <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5 sticky top-24">
+                    <h2 id="formTitle" class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-plus text-brand-600"></i> Nuova Spesa
+                    </h2>
+
+                    <form id="expenseForm" class="space-y-4">
+                        <input type="hidden" id="editingExpenseId" value="">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Data Scontrino</label>
+                            <input type="date" id="date" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Descrizione</label>
+                            <input type="text" id="description" placeholder="Es. Pranzo cliente, Taxi aeroporto..." required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Valuta</label>
+                                <select id="currency" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                                    <option value="EUR">EUR (€)</option>
+                                    <option value="USD">USD ($)</option>
+                                    <option value="GBP">GBP (£)</option>
+                                    <option value="CHF">CHF (Fr)</option>
+                                    <option value="JPY">JPY (¥)</option>
+                                    <option value="CAD">CAD ($)</option>
+                                    <option value="AUD">AUD ($)</option>
+                                    <option value="CNY">CNY (¥)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Importo</label>
+                                <input type="number" step="0.01" id="amount" placeholder="0.00" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500">Foto Scontrino Originale</label>
+                                <span class="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Max 50 MB</span>
+                            </div>
+                            
+                            <!-- File Upload Box -->
+                            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl hover:border-brand-500 transition bg-slate-50 group cursor-pointer relative" onclick="document.getElementById('receiptImage').click();">
+                                <div class="space-y-1 text-center">
+                                    <i class="fa-solid fa-camera text-slate-400 group-hover:text-brand-500 text-2xl mb-1 transition"></i>
+                                    <div class="text-xs text-slate-600">
+                                        <span class="font-semibold text-brand-600">Scatta foto HD</span> o carica file
+                                    </div>
+                                    <p class="text-[10px] text-slate-400">Supporta file fino a 50 MB (JPG, PNG)</p>
+                                </div>
+                                <input type="file" id="receiptImage" accept="image/*" capture="environment" class="hidden" onchange="previewSelectedFile(this)">
+                            </div>
+                            
+                            <!-- Image Preview Thumbnail in Form -->
+                            <div id="formImagePreviewContainer" class="hidden mt-3 relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 p-2 flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <img id="formImageThumbnail" src="" alt="Anteprima" class="w-10 h-10 object-cover rounded-lg">
+                                    <div class="min-w-0">
+                                        <span id="formImageName" class="block text-xs text-slate-700 truncate max-w-[150px] font-medium">scontrino.jpg</span>
+                                        <span id="formImageSize" class="block text-[10px] text-slate-400">0 MB</span>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="clearFileSelection()" class="text-slate-400 hover:text-red-500 text-xs p-1">
+                                    <i class="fa-solid fa-xmark text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex space-x-2">
+                            <button type="submit" id="submitExpenseBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white font-medium py-2.5 px-4 rounded-xl text-sm shadow-xs transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-plus"></i>
+                                <span id="submitExpenseBtnText">Salva Spesa</span>
+                            </button>
+                            <button type="button" id="cancelEditBtn" onclick="cancelEditing()" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-3 rounded-xl text-sm transition">
+                                Annulla
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="lg:col-span-2 space-y-4">
+                <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
+                        <div>
+                            <h2 class="text-base font-semibold text-slate-900">Spese Registrate</h2>
+                            <p class="text-xs text-slate-500">Gestisci le spese, modifica o scarica i singoli PDF e report in tabella</p>
+                        </div>
+                        <div class="flex items-center space-x-2 w-full sm:w-auto">
+                            <button onclick="clearAllExpenses()" id="clearAllBtn" class="hidden text-xs text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 transition">
+                                <i class="fa-solid fa-trash-can mr-1"></i> Svuota Tutto
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sezione Filtro per Intervallo Date & Pulsanti PDF Cumulativi -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                <i class="fa-solid fa-filter text-brand-600"></i> Filtro & Generazione PDF per Intervallo Date
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-1">Da Data</label>
+                                <input type="date" id="filterStartDate" onchange="renderExpenses()" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-1">A Data</label>
+                                <input type="date" id="filterEndDate" onchange="renderExpenses()" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <button onclick="generateTableReportPDF()" class="w-full bg-slate-800 hover:bg-slate-900 active:scale-95 text-white text-xs font-semibold py-2.5 px-3 rounded-lg transition flex items-center justify-center space-x-1.5 shadow-xs">
+                                <i class="fa-solid fa-table"></i>
+                                <span id="pdfTableButtonText">PDF Tabella Spese (0)</span>
+                            </button>
+                            <button onclick="generateDateRangePDF()" class="w-full bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-xs font-semibold py-2.5 px-3 rounded-lg transition flex items-center justify-center space-x-1.5 shadow-xs">
+                                <i class="fa-solid fa-file-pdf"></i>
+                                <span id="pdfRangeButtonText">PDF Tutti Scontrini (0)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Container lista -->
+                    <div id="expenseList" class="space-y-3">
+                        <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
+                            <div class="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
+                                <i class="fa-solid fa-file-invoice text-xl"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-700">Nessuna spesa inserita</p>
+                            <p class="text-xs text-slate-400 mt-1">Compila il modulo a sinistra per aggiungere scontrini</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="imageModal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs hidden flex items-center justify-center p-4" onclick="closeImageModal()">
+        <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2" onclick="event.stopPropagation()">
+            <button onclick="closeImageModal()" class="absolute top-4 right-4 z-10 bg-slate-900/60 hover:bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <img id="modalImage" src="" alt="Scontrino Zoom" class="max-h-[80vh] w-auto object-contain rounded-xl mx-auto">
+        </div>
+    </div>
+
+    <div id="tripSettingsModal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-user-gear text-brand-600"></i> Modifica Dettagli Trasferta
+                </h3>
+                <button onclick="closeTripSettingsModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <form id="tripSettingsForm" onsubmit="saveTripSettings(event)" class="space-y-3">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Nome</label>
+                        <input type="text" id="inputFirstName" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Cognome</label>
+                        <input type="text" id="inputLastName" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Nome Azienda / Società</label>
+                    <input type="text" id="inputCompanyName" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Nazione / Città</label>
+                    <input type="text" id="inputLocation" placeholder="Es. Italia, Milano" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div class="pt-3 flex space-x-3">
+                    <button type="button" onclick="closeTripSettingsModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 rounded-xl text-sm transition">
+                        Annulla
+                    </button>
+                    <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 rounded-xl text-sm transition shadow-xs">
+                        Salva Dati
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const currencySymbols = {
+            'EUR': '€',
+            'USD': '$',
+            'GBP': '£',
+            'CHF': 'Fr',
+            'JPY': '¥',
+            'CAD': '$',
+            'AUD': '$',
+            'CNY': '¥'
+        };
+
+        let expenses = [];
+        let tripDetails = {
+            firstName: "Mario",
+            lastName: "Rossi",
+            companyName: "Azienda S.p.A.",
+            location: "Italia, Milano"
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedExpenses = localStorage.getItem('corporate_expenses');
+            if (savedExpenses) {
+                try {
+                    expenses = JSON.parse(savedExpenses);
+                } catch(e) {
+                    console.error("Errore nel parsing delle spese salvate", e);
+                }
+            }
+
+            const savedTrip = localStorage.getItem('corporate_trip_details');
+            if (savedTrip) {
+                try {
+                    const parsed = JSON.parse(savedTrip);
+                    // Supporta retrocompatibilità se salvato come travelerName unico
+                    if (parsed.travelerName && !parsed.firstName) {
+                        const parts = parsed.travelerName.split(' ');
+                        tripDetails.firstName = parts[0] || 'Mario';
+                        tripDetails.lastName = parts.slice(1).join(' ') || 'Rossi';
+                    } else {
+                        tripDetails.firstName = parsed.firstName || "Mario";
+                        tripDetails.lastName = parsed.lastName || "Rossi";
+                    }
+                    tripDetails.companyName = parsed.companyName || "Azienda S.p.A.";
+                    tripDetails.location = parsed.location || "Italia, Milano";
+                } catch(e) {
+                    console.error("Errore nel parsing dei dettagli trasferta", e);
+                }
+            }
+
+            updateTripDetailsUI();
+
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = today;
+
+            if (expenses.length > 0) {
+                const dates = expenses.map(e => e.date).sort();
+                document.getElementById('filterStartDate').value = dates[0];
+                document.getElementById('filterEndDate').value = dates[dates.length - 1];
+            } else {
+                document.getElementById('filterStartDate').value = today;
+                document.getElementById('filterEndDate').value = today;
+            }
+
+            renderExpenses();
+        });
+
+        function saveToLocalStorage() {
+            localStorage.setItem('corporate_expenses', JSON.stringify(expenses));
+            localStorage.setItem('corporate_trip_details', JSON.stringify(tripDetails));
+        }
+
+        function updateTripDetailsUI() {
+            document.getElementById('displayFirstName').textContent = tripDetails.firstName;
+            document.getElementById('displayLastName').textContent = tripDetails.lastName;
+            document.getElementById('displayCompanyName').textContent = tripDetails.companyName;
+            document.getElementById('displayLocation').textContent = tripDetails.location;
+            document.getElementById('headerTripSummaryBtn').textContent = `${tripDetails.firstName} ${tripDetails.lastName} - ${tripDetails.location}`;
+        }
+
+        function openTripSettingsModal() {
+            document.getElementById('inputFirstName').value = tripDetails.firstName;
+            document.getElementById('inputLastName').value = tripDetails.lastName;
+            document.getElementById('inputCompanyName').value = tripDetails.companyName;
+            document.getElementById('inputLocation').value = tripDetails.location;
+            document.getElementById('tripSettingsModal').classList.remove('hidden');
+        }
+
+        function closeTripSettingsModal() {
+            document.getElementById('tripSettingsModal').classList.add('hidden');
+        }
+
+        function saveTripSettings(e) {
+            e.preventDefault();
+            tripDetails.firstName = document.getElementById('inputFirstName').value.trim();
+            tripDetails.lastName = document.getElementById('inputLastName').value.trim();
+            tripDetails.companyName = document.getElementById('inputCompanyName').value.trim();
+            tripDetails.location = document.getElementById('inputLocation').value.trim();
+            
+            saveToLocalStorage();
+            updateTripDetailsUI();
+            closeTripSettingsModal();
+        }
+
+        function previewSelectedFile(input) {
+            const container = document.getElementById('formImagePreviewContainer');
+            const thumbnail = document.getElementById('formImageThumbnail');
+            const nameSpan = document.getElementById('formImageName');
+            const sizeSpan = document.getElementById('formImageSize');
+
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const fileSizeMB = file.size / (1024 * 1024);
+
+                if (fileSizeMB > 50) {
+                    alert('Il file selezionato supera i 50 MB consentiti. Si prega di scegliere un file più leggero.');
+                    input.value = '';
+                    container.classList.add('hidden');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    thumbnail.src = e.target.result;
+                    nameSpan.textContent = file.name;
+                    sizeSpan.textContent = `${fileSizeMB.toFixed(2)} MB`;
+                    container.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function clearFileSelection() {
+            const input = document.getElementById('receiptImage');
+            input.value = '';
+            document.getElementById('formImagePreviewContainer').classList.add('hidden');
+        }
+
+        function editExpense(id) {
+            const expense = expenses.find(e => e.id === id);
+            if (!expense) return;
+
+            document.getElementById('editingExpenseId').value = expense.id;
+            document.getElementById('date').value = expense.date;
+            document.getElementById('description').value = expense.description;
+            document.getElementById('amount').value = expense.amount;
+            document.getElementById('currency').value = expense.currency || 'EUR';
+
+            const container = document.getElementById('formImagePreviewContainer');
+            const thumbnail = document.getElementById('formImageThumbnail');
+            const nameSpan = document.getElementById('formImageName');
+            const sizeSpan = document.getElementById('formImageSize');
+
+            thumbnail.src = expense.imageSrc;
+            nameSpan.textContent = expense.fileName || 'scontrino.jpg';
+            sizeSpan.textContent = 'Immagine allegata';
+            container.classList.remove('hidden');
+
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-brand-600"></i> Modifica Spesa';
+            document.getElementById('submitExpenseBtnText').textContent = 'Aggiorna Spesa';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEditing() {
+            document.getElementById('editingExpenseId').value = '';
+            document.getElementById('expenseForm').reset();
+            clearFileSelection();
+
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-circle-plus text-brand-600"></i> Nuova Spesa';
+            document.getElementById('submitExpenseBtnText').textContent = 'Salva Spesa';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = today;
+        }
+
+        document.getElementById('expenseForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const editingId = document.getElementById('editingExpenseId').value;
+            const date = document.getElementById('date').value;
+            const description = document.getElementById('description').value;
+            const currency = document.getElementById('currency').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const fileInput = document.getElementById('receiptImage');
+
+            const existingExpense = editingId ? expenses.find(e => e.id === editingId) : null;
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                if (existingExpense) {
+                    existingExpense.date = date;
+                    existingExpense.description = description;
+                    existingExpense.currency = currency;
+                    existingExpense.amount = amount;
+
+                    saveToLocalStorage();
+                    renderExpenses();
+                    cancelEditing();
+                    return;
+                } else {
+                    alert('Si prega di caricare la foto dello scontrino.');
+                    return;
+                }
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 2000;
+
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        } else {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+                    if (editingId && existingExpense) {
+                        existingExpense.date = date;
+                        existingExpense.description = description;
+                        existingExpense.currency = currency;
+                        existingExpense.amount = amount;
+                        existingExpense.imageSrc = optimizedDataUrl;
+                        existingExpense.fileName = file.name;
+                    } else {
+                        const newExpense = {
+                            id: 'exp_' + Date.now(),
+                            date,
+                            description,
+                            currency,
+                            amount,
+                            imageSrc: optimizedDataUrl,
+                            fileName: file.name
+                        };
+                        expenses.unshift(newExpense);
+                    }
+
+                    saveToLocalStorage();
+                    renderExpenses();
+                    cancelEditing();
+                };
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+        function getFilteredExpenses() {
+            const startDate = document.getElementById('filterStartDate').value;
+            const endDate = document.getElementById('filterEndDate').value;
+
+            return expenses.filter(exp => {
+                if (startDate && exp.date < startDate) return false;
+                if (endDate && exp.date > endDate) return false;
+                return true;
+            });
+        }
+
+        function renderExpenses() {
+            const listContainer = document.getElementById('expenseList');
+            const clearAllBtn = document.getElementById('clearAllBtn');
+            const totalBadge = document.getElementById('totalBadge');
+            const pdfRangeButtonText = document.getElementById('pdfRangeButtonText');
+            const pdfTableButtonText = document.getElementById('pdfTableButtonText');
+
+            const filtered = getFilteredExpenses();
+            pdfRangeButtonText.textContent = `PDF Tutti Scontrini (${filtered.length})`;
+            pdfTableButtonText.textContent = `PDF Tabella Spese (${filtered.length})`;
+
+            // Calcolo totali per valuta
+            const totalsByCurrency = {};
+            expenses.forEach(exp => {
+                const cur = exp.currency || 'EUR';
+                if (!totalsByCurrency[cur]) totalsByCurrency[cur] = 0;
+                totalsByCurrency[cur] += parseFloat(exp.amount);
+            });
+
+            const totalStrs = Object.keys(totalsByCurrency).map(cur => {
+                const sym = currencySymbols[cur] || cur;
+                return `${sym} ${totalsByCurrency[cur].toFixed(2)}`;
+            });
+            totalBadge.textContent = `Totale: ${totalStrs.length > 0 ? totalStrs.join(' | ') : '€ 0.00'}`;
+
+            if (expenses.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
+                        <div class="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
+                            <i class="fa-solid fa-file-invoice text-xl"></i>
+                        </div>
+                        <p class="text-sm font-medium text-slate-700">Nessuna spesa inserita</p>
+                        <p class="text-xs text-slate-400 mt-1">Compila il modulo a sinistra per aggiungere scontrini</p>
+                    </div>
+                `;
+                clearAllBtn.classList.add('hidden');
+                return;
+            }
+
+            clearAllBtn.classList.remove('hidden');
+
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-8 border border-slate-200 rounded-xl bg-slate-50">
+                        <p class="text-sm font-medium text-slate-600">Nessuna spesa trovata nell'intervallo di date selezionato.</p>
+                        <p class="text-xs text-slate-400 mt-1">Modifica le date sopra per visualizzare gli scontrini.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let htmlContent = '';
+            filtered.forEach(exp => {
+                const formattedDate = new Date(exp.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const cur = exp.currency || 'EUR';
+                const sym = currencySymbols[cur] || cur;
+                const formattedAmount = `${sym} ${parseFloat(exp.amount).toFixed(2)}`;
+
+                htmlContent += `
+                    <div class="group bg-white border border-slate-200 hover:border-brand-300 rounded-xl p-4 transition shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="flex items-center space-x-3.5 w-full sm:w-auto">
+                            <div class="relative flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 w-14 h-14 bg-slate-100" onclick="openImageModal('${exp.imageSrc}')">
+                                <img src="${exp.imageSrc}" alt="Scontrino" class="w-full h-full object-cover group-hover:scale-105 transition">
+                                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs">
+                                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                                </div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">${formattedDate}</span>
+                                    <span class="text-xs font-bold text-brand-600">${formattedAmount} <span class="text-[10px] text-slate-400 uppercase">(${cur})</span></span>
+                                </div>
+                                <h3 class="text-sm font-semibold text-slate-800 truncate mt-0.5" title="${escapeHtml(exp.description)}">${escapeHtml(exp.description)}</h3>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+                            <button onclick="generateReceiptPDF('${exp.id}')" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-medium px-3 py-2 rounded-xl transition flex items-center space-x-1 shadow-xs" title="Genera PDF scontrino con dettagli">
+                                <i class="fa-solid fa-file-pdf"></i>
+                                <span>PDF Scontrino</span>
+                            </button>
+                            <button onclick="editExpense('${exp.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs p-2 rounded-xl transition" title="Modifica spesa">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteExpense('${exp.id}')" class="bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 text-xs p-2 rounded-xl transition" title="Elimina spesa">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            listContainer.innerHTML = htmlContent;
+        }
+
+        // Genera PDF con la tabella delle spese filtrate
+        function generateTableReportPDF() {
+            const filtered = getFilteredExpenses();
+            if (filtered.length === 0) {
+                alert('Nessuna spesa trovata nell\'intervallo di date selezionato per generare il report.');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const startDate = document.getElementById('filterStartDate').value || 'Inizio';
+            const endDate = document.getElementById('filterEndDate').value || 'Fine';
+
+            doc.setFontSize(18);
+            doc.setTextColor(30, 41, 59);
+            doc.text('NOTA SPESE TRASFERTA', 14, 20);
+
+            doc.setFontSize(10, 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Nome: ${tripDetails.firstName}`, 14, 26);
+            doc.text(`Cognome: ${tripDetails.lastName}`, 14, 32);
+            doc.text(`Azienda: ${tripDetails.companyName}`, 14, 38);
+            doc.text(`Luogo: ${tripDetails.location}`, 14, 44);
+            doc.text(`Periodo: ${startDate} al ${endDate}`, 14, 50);
+
+            const sortedFiltered = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
+            
+            const totalsByCurrency = {};
+            const tableRows = sortedFiltered.map((exp, index) => {
+                const cur = exp.currency || 'EUR';
+                const amountNum = parseFloat(exp.amount);
+                if (!totalsByCurrency[cur]) totalsByCurrency[cur] = 0;
+                totalsByCurrency[cur] += amountNum;
+
+                const formattedDate = new Date(exp.date).toLocaleDateString('it-IT');
+                const sym = currencySymbols[cur] || cur;
+                return [
+                    index + 1,
+                    formattedDate,
+                    exp.description,
+                    `${cur}`,
+                    `${sym} ${amountNum.toFixed(2)}`
+                ];
+            });
+
+            // Riga riassuntiva totali per valuta
+            const totalSummaryStr = Object.keys(totalsByCurrency).map(cur => {
+                const sym = currencySymbols[cur] || cur;
+                return `${sym} ${totalsByCurrency[cur].toFixed(2)} (${cur})`;
+            }).join(' | ');
+
+            tableRows.push([
+                '',
+                '',
+                'TOTALE COMPLESSIVO',
+                '',
+                totalSummaryStr
+            ]);
+
+            doc.autoTable({
+                startY: 56,
+                head: [['N°', 'Data', 'Descrizione', 'Valuta', 'Importo']],
+                body: tableRows,
+                theme: 'striped',
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+                footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+                columnStyles: {
+                    0: { cellWidth: 12, halign: 'center' },
+                    1: { cellWidth: 28, halign: 'center' },
+                    2: { cellWidth: 85 },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 45, halign: 'right' }
+                },
+                didParseCell: function(data) {
+                    if (data.row.index === tableRows.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [226, 232, 240];
+                    }
+                }
+            });
+
+            const cleanStart = startDate !== 'Inizio' ? startDate.replace(/-/g, '') : 'tutti';
+            const cleanEnd = endDate !== 'Fine' ? endDate.replace(/-/g, '') : 'tutti';
+            doc.save(`nota_spese_${tripDetails.lastName}_${tripDetails.firstName}_${cleanStart}_${cleanEnd}.pdf`);
+        }
+
+        // Genera PDF scontrino singolo con intestazione data, descrizione e importo con valuta
+        function generateReceiptPDF(id) {
+            const expense = expenses.find(e => e.id === id);
+            if (!expense) return;
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const img = new Image();
+            img.src = expense.imageSrc;
+            img.onload = function() {
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+
+                const cur = expense.currency || 'EUR';
+                const sym = currencySymbols[cur] || cur;
+
+                doc.setFontSize(14);
+                doc.setTextColor(30, 41, 59);
+                doc.text('SCONTRINO SPESA TRASFERTA', 14, 15);
+
+                doc.setFontSize(10, 'normal');
+                doc.setTextColor(100, 116, 139);
+                doc.text(`Nome: ${tripDetails.firstName} | Cognome: ${tripDetails.lastName}`, 14, 22);
+                doc.text(`Azienda: ${tripDetails.companyName}`, 14, 28);
+                doc.text(`Data: ${new Date(expense.date).toLocaleDateString('it-IT')} | Importo: ${sym} ${parseFloat(expense.amount).toFixed(2)} (${cur})`, 14, 34);
+                doc.text(`Descrizione: ${expense.description}`, 14, 40);
+
+                doc.setDrawColor(203, 213, 225);
+                doc.line(14, 44, pageWidth - 14, 44);
+
+                const topMargin = 48;
+                const margin = 15;
+                const maxWidth = pageWidth - (margin * 2);
+                const maxHeight = pageHeight - topMargin - 15;
+
+                let imgWidth = img.width;
+                let imgHeight = img.height;
+
+                const ratio = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+                imgWidth = imgWidth * ratio;
+                imgHeight = imgHeight * ratio;
+
+                const x = (pageWidth - imgWidth) / 2;
+                const y = topMargin + (maxHeight - imgHeight) / 2;
+
+                doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
+
+                const cleanDate = expense.date.replace(/-/g, '');
+                const cleanAmount = parseFloat(expense.amount).toFixed(2).replace('.', '_');
+                doc.save(`scontrino_${tripDetails.lastName}_${cleanDate}_${cleanAmount}${cur}.pdf`);
+            };
+        }
+
+        // Genera PDF cumulativo scontrini con intestazione per ciascuno
+        function generateDateRangePDF() {
+            const filtered = getFilteredExpenses();
+            if (filtered.length === 0) {
+                alert('Nessuno scontrino trovato nell\'intervallo di date selezionato.');
+                return;
+            }
+
+            const startDate = document.getElementById('filterStartDate').value || 'tutti';
+            const endDate = document.getElementById('filterEndDate').value || 'tutti';
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            let loadedCount = 0;
+            const sortedFiltered = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
+
+            sortedFiltered.forEach((expense, index) => {
+                const img = new Image();
+                img.src = expense.imageSrc;
+                img.onload = function() {
+                    if (index > 0) {
+                        doc.addPage();
+                    }
+
+                    const pageWidth = doc.internal.pageSize.getWidth();
+                    const pageHeight = doc.internal.pageSize.getHeight();
+
+                    const cur = expense.currency || 'EUR';
+                    const sym = currencySymbols[cur] || cur;
+
+                    doc.setFontSize(14);
+                    doc.setTextColor(30, 41, 59);
+                    doc.text(`SCONTRINO ${index + 1} DI ${sortedFiltered.length}`, 14, 15);
+
+                    doc.setFontSize(10, 'normal');
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(`Nome: ${tripDetails.firstName} | Cognome: ${tripDetails.lastName}`, 14, 22);
+                    doc.text(`Azienda: ${tripDetails.companyName}`, 14, 28);
+                    doc.text(`Data: ${new Date(expense.date).toLocaleDateString('it-IT')} | Importo: ${sym} ${parseFloat(expense.amount).toFixed(2)} (${cur})`, 14, 34);
+                    doc.text(`Descrizione: ${expense.description}`, 14, 40);
+
+                    doc.setDrawColor(203, 213, 225);
+                    doc.line(14, 44, pageWidth - 14, 44);
+
+                    const topMargin = 48;
+                    const margin = 15;
+                    const maxWidth = pageWidth - (margin * 2);
+                    const maxHeight = pageHeight - topMargin - 15;
+
+                    let imgWidth = img.width;
+                    let imgHeight = img.height;
+
+                    const ratio = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+                    imgWidth = imgWidth * ratio;
+                    imgHeight = imgHeight * ratio;
+
+                    const x = (pageWidth - imgWidth) / 2;
+                    const y = topMargin + (maxHeight - imgHeight) / 2;
+
+                    doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
+                    loadedCount++;
+
+                    if (loadedCount === sortedFiltered.length) {
+                        doc.save(`scontrini_${tripDetails.lastName}_${startDate}_al_${endDate}.pdf`);
+                    }
+                };
+            });
+        }
+
+        function deleteExpense(id) {
+            expenses = expenses.filter(e => e.id !== id);
+            saveToLocalStorage();
+            renderExpenses();
+        }
+
+        function clearAllExpenses() {
+            expenses = [];
+            saveToLocalStorage();
+            renderExpenses();
+        }
+
+        function openImageModal(src) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = src;
+            modal.classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.add('hidden');
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
